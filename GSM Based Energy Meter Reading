@@ -1,0 +1,158 @@
+#include<PIC.H>
+#include "pic_lcd4.h"
+#include "delay.h"
+#include<string.h>
+
+float cost=0;
+char str[7];
+int unit_price=50,flag=0,pulse=0,cnt=0,day=1,month=1,year=2018,cost1=0;
+
+void uart_init(void)           //UART initiation
+{
+	TRISC=0x80;
+	PORTC=0x00;
+	TXSTA=0x24;
+	RCSTA=0x90;
+	SPBRG=0x19;
+	TXREG=0x00;
+	//TXIE=1;
+}
+
+void transmit(char m[])
+{
+
+int s=strlen(m);
+for(int i=0;i<s;i++)
+{
+TXREG=m[i];
+while(!TXIF);
+
+}
+}
+
+void int2str(int ver_conv)    //int to string conversion
+  {
+  int ver_inc=0,ver_place=1000,b=0;
+         
+     while(ver_place!=0)
+       {
+            str[ver_inc]=ver_conv/ver_place+0x30;
+            ver_conv=ver_conv%ver_place;
+            ver_place=ver_place/10;
+            ver_inc++;
+       }
+           str[ver_inc]='\0';
+  } 
+  
+  
+void interrupt ISR()
+{
+	if(INTF)
+	{
+		pulse++;
+		cost=cost + unit_price/3200.0;
+		INTF=0;
+	}
+	if(TMR0IF)
+	{
+		cnt++;
+
+		if(cnt==3000)
+		{
+			day++;
+			cnt=0;
+		
+		}
+
+		if(day==30)
+		{
+			day=1;
+			month++;
+			flag=1;
+		}
+		if(month==12)
+		{
+		
+			month=1;
+			year++;
+		
+		}
+		
+		TMR0IF=0;
+	}	
+}
+
+
+void main()
+{
+	TRISB=0x01;
+	PORTB=0x00;
+
+	OPTION=0x00;
+	GIE=1;
+	PEIE=1;
+	INTE=1;
+	TMR0IE=1;
+	uart_init();
+	Lcd4_Init();
+	
+	
+	while(1)
+	{
+
+		Lcd4_Decimal2(0x80,day);
+		Lcd4_Display(0x82,"-",1);
+		Lcd4_Decimal2(0x83,month);
+		Lcd4_Display(0x85,"-",1);
+		Lcd4_Decimal4(0x86,year);
+	
+		int unit=pulse*100/32;
+		int u1=unit/10000;
+		Lcd4_Decimal2(0xc0,unit/10000);
+		Lcd4_Display(0xc2,".",1);
+		Lcd4_Decimal4(0xc3,unit%10000);
+		cost1=cost*1000;
+		Lcd4_Decimal2(0xca,cost1/1000);
+		Lcd4_Display(0xcc,".",1);
+		Lcd4_Decimal3(0xcd,cost1%1000);
+
+		if(flag==1)
+		{
+			flag=0;
+			transmit("AT\r\n");
+			DelayMs(255);
+			transmit("AT+CMGF=1\r\n");
+			DelayMs(255);
+			transmit("AT+CMGS=\"8606717537\"\r\n");
+			DelayMs(255);
+			transmit("Ajith,\r\n");
+			transmit("Unit Consumed: ");
+			int2str(unit/10000);
+			transmit(str);
+			transmit(".");
+			int2str(unit%10000);
+			transmit(str);
+			transmit("\r\nBill Amount: ");
+			int2str(cost1/1000);
+			transmit(str);
+			transmit(".");
+			int2str(cost1%1000);
+			transmit(str);
+			transmit(" Rs");
+			transmit("\r\nDue Date: ");
+			int2str(day+15);
+			transmit(str);
+			transmit("-");
+			int2str(month);
+			transmit(str);
+			transmit("-");
+			int2str(year);
+			transmit(str);
+			transmit("\r\n");
+			TXREG=0X1A;
+			while(!TXIF);
+			pulse=0;
+			cost=0;
+		}
+	}
+}
